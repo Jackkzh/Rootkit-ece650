@@ -1,0 +1,1 @@
+cmd_/home/wz173/Rootkit-ece650/sneaky_mod.ko := ld -r -m elf_x86_64  -z max-page-size=0x200000  --build-id  -T ./scripts/module-common.lds -o /home/wz173/Rootkit-ece650/sneaky_mod.ko /home/wz173/Rootkit-ece650/sneaky_mod.o /home/wz173/Rootkit-ece650/sneaky_mod.mod.o;  true
