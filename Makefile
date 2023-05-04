@@ -18,15 +18,3 @@ obj-m :=    sneaky_mod.o
 
 endif
 
-
-
-# TARGETS=test 
-
-# all: $(TARGETS)
-
-# test: sneaky_process.c
-# 	gcc -o sneaky_process sneaky_process.c
-# .PHONY:
-# 	clean
-# clean:
-# 	rm -rf *.o sneaky_process
