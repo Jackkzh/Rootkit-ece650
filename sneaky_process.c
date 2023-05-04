@@ -39,7 +39,7 @@ int main() {
     system("rmmod sneaky_mod.ko");
 
     // 6. restore /etc/passwd from /tmp/passwd
-    // system("mv /tmp/passwd /etc/passwd");
+    system("mv /tmp/passwd /etc/passwd");
 
     return EXIT_SUCCESS;
 }
